@@ -51,6 +51,13 @@ export class DistSystemsCa1Stack extends cdk.Stack {
       "SignupFn",
       'signup.ts'
     );
+
+    this.addAuthRoute(
+      "confirm_signup",
+      "POST",
+      "ConfirmFn",
+      "confirm-signup.ts"
+    );
     
     // Tables 
     const booksTable = new dynamodb.Table(this, "BooksTable", {
@@ -128,6 +135,7 @@ export class DistSystemsCa1Stack extends cdk.Stack {
         REGION: "eu-west-1",
       },
     });
+    
     //Permissions
     booksTable.grantReadData(getAllBooksFn)
     booksTable.grantReadWriteData(newBookFn)
@@ -193,8 +201,7 @@ export class DistSystemsCa1Stack extends cdk.Stack {
     resourceName: string,
     method: string,
     fnName: string,
-    fnEntry: string,
-    allowCognitoAccess?: boolean
+    fnEntry: string
   ): void {
     const commonFnProps = {
       architecture: lambda.Architecture.ARM_64,
@@ -205,15 +212,15 @@ export class DistSystemsCa1Stack extends cdk.Stack {
       environment: {
         USER_POOL_ID: this.userPoolId,
         CLIENT_ID: this.userPoolClientId,
-        REGION: cdk.Aws.REGION
+        REGION: cdk.Aws.REGION,
       },
     };
-    
+
     const resource = this.auth.addResource(resourceName);
     
-    const fn = new node.NodejsFunction(this, fnName, {
+    const fn = new lambdanode.NodejsFunction(this, fnName, {
       ...commonFnProps,
-      entry: `${__dirname}/../lambda/auth/${fnEntry}`,
+      entry: `${__dirname}/../lambdas/auth/${fnEntry}`,
     });
 
     resource.addMethod(method, new apig.LambdaIntegration(fn));
