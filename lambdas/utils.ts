@@ -53,7 +53,7 @@ import {
     try {
       const url = `https://cognito-idp.${region}.amazonaws.com/${userPoolId}/.well-known/jwks.json`;
       const { data }: { data: Jwk } = await axios.get(url);
-      const pem = jwkToPem(data.keys[0]);
+      const pem = jwkToPem(data[0]);
   
       return jwt.verify(token, pem, { algorithms: ["RS256"] });
     } catch (err) {

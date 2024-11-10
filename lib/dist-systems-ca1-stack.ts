@@ -44,6 +44,41 @@ export class DistSystemsCa1Stack extends cdk.Stack {
     });
 
     this.auth = authApi.root.addResource("auth");
+    const appApi = new apig.RestApi(this, "AppApi", {
+      description: "App RestApi",
+      endpointTypes: [apig.EndpointType.REGIONAL],
+      defaultCorsPreflightOptions: {
+        allowOrigins: apig.Cors.ALL_ORIGINS,
+      },
+    });
+
+    const appCommonFnProps = {
+      architecture: lambda.Architecture.ARM_64,
+      timeout: cdk.Duration.seconds(10),
+      memorySize: 128,
+      runtime: lambda.Runtime.NODEJS_18_X,
+      handler: "handler",
+      environment: {
+        USER_POOL_ID: this.userPoolId,
+        CLIENT_ID: this.userPoolClientId,
+        REGION: cdk.Aws.REGION,
+      },
+    };
+
+    const authorizerFn = new node.NodejsFunction(this, "AuthorizerFn", {
+      ...appCommonFnProps,
+      entry: "./lambdas/auth/authorizer.ts",
+    });
+
+    const requestAuthorizer = new apig.RequestAuthorizer(
+      this,
+      "RequestAuthorizer",
+      {
+        identitySources: [apig.IdentitySource.header("cookie")],
+        handler: authorizerFn,
+        resultsCacheTtl: cdk.Duration.minutes(0),
+      }
+    );
 
     this.addAuthRoute(
       "signup",
@@ -61,7 +96,8 @@ export class DistSystemsCa1Stack extends cdk.Stack {
 
     this.addAuthRoute('signout', 'GET', 'SignoutFn', 'signout.ts');
     this.addAuthRoute('signin', 'POST', 'SigninFn', 'signin.ts');
-    
+
+
     // Tables 
     const booksTable = new dynamodb.Table(this, "BooksTable", {
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
@@ -138,7 +174,7 @@ export class DistSystemsCa1Stack extends cdk.Stack {
         REGION: "eu-west-1",
       },
     });
-    
+
     //Permissions
     booksTable.grantReadData(getAllBooksFn)
     booksTable.grantReadWriteData(newBookFn)
@@ -161,28 +197,55 @@ export class DistSystemsCa1Stack extends cdk.Stack {
 
     //Endpoints
     const booksEndpoint = api.root.addResource("books");
+
+    // Public GET 
     booksEndpoint.addMethod(
       "GET",
-      new apig.LambdaIntegration(getAllBooksFn, { proxy: true })
+      new apig.LambdaIntegration(getAllBooksFn, { proxy: true }),
+      {
+        authorizer: requestAuthorizer, 
+        authorizationType: apig.AuthorizationType.CUSTOM,
+      }
     );
+
+    // Protected POST 
     booksEndpoint.addMethod(
       "POST",
-      new apig.LambdaIntegration(newBookFn, { proxy: true })
+      new apig.LambdaIntegration(newBookFn, { proxy: true }),
+      {
+        authorizer: requestAuthorizer, 
+        authorizationType: apig.AuthorizationType.CUSTOM,
+      }
     );
 
     const bookEndpoint = booksEndpoint.addResource("{id}");
+
+    // Public GET 
     bookEndpoint.addMethod(
       "GET",
-      new apig.LambdaIntegration(getBookByIdFn, { proxy: true }),
+      new apig.LambdaIntegration(getBookByIdFn, { proxy: true })
     );
+
+    // Protected DELETE
     bookEndpoint.addMethod(
       "DELETE",
       new apig.LambdaIntegration(deleteBookFn, { proxy: true }),
+      {
+        authorizer: requestAuthorizer, 
+        authorizationType: apig.AuthorizationType.CUSTOM,
+      }
     );
+
+    // Protected PUT
     bookEndpoint.addMethod(
       "PUT",
       new apig.LambdaIntegration(updateBookFn, { proxy: true }),
+      {
+        authorizer: requestAuthorizer,
+        authorizationType: apig.AuthorizationType.CUSTOM,
+      }
     );
+
     // AWS Resource
     new custom.AwsCustomResource(this, "booksddbInitData", {
       onCreate: {
@@ -220,7 +283,7 @@ export class DistSystemsCa1Stack extends cdk.Stack {
     };
 
     const resource = this.auth.addResource(resourceName);
-    
+
     const fn = new lambdanode.NodejsFunction(this, fnName, {
       ...commonFnProps,
       entry: `${__dirname}/../lambdas/auth/${fnEntry}`,
