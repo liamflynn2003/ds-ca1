@@ -4,7 +4,7 @@ import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
 import Ajv from "ajv";
 import schema from "../shared/types.schema.json";
 const ajv = new Ajv();
-const isValidBodyParams = ajv.compile(schema || {});
+const isValidBodyParams = ajv.compile(schema.definitions["Book"]  || {});
 
 const ddbDocClient = createDDbDocClient();
 
