@@ -20,8 +20,8 @@ export class DistSystemsCa1Stack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       tableName: "Books",
     });
-    // Functions
 
+    // Functions
     const getAllBooksFn = new lambdanode.NodejsFunction(
       this,
       "GetAllBooksFn",
@@ -49,9 +49,26 @@ export class DistSystemsCa1Stack extends cdk.Stack {
         REGION: "eu-west-1",
       },
     });
+
+    const getBookByIdFn = new lambdanode.NodejsFunction(
+      this,
+      "GetBookByIdFn",
+      {
+        architecture: lambda.Architecture.ARM_64,
+        runtime: lambda.Runtime.NODEJS_18_X,
+        entry: `${__dirname}/../lambdas/getBookById.ts`,
+        timeout: cdk.Duration.seconds(10),
+        memorySize: 128,
+        environment: {
+          TABLE_NAME: booksTable.tableName,
+          REGION: 'eu-west-1',
+        },
+      }
+    );
     //Permissions
     booksTable.grantReadData(getAllBooksFn)
     booksTable.grantReadWriteData(newBookFn)
+    booksTable.grantReadData(getBookByIdFn)
     // REST API
     const api = new apig.RestApi(this, "RestAPI", {
       description: "books api",
@@ -75,6 +92,12 @@ export class DistSystemsCa1Stack extends cdk.Stack {
     booksEndpoint.addMethod(
       "POST",
       new apig.LambdaIntegration(newBookFn, { proxy: true })
+    );
+
+    const bookEndpoint = booksEndpoint.addResource("{id}");
+    bookEndpoint.addMethod(
+      "GET",
+      new apig.LambdaIntegration(getBookByIdFn, { proxy: true }),
     );
     // AWS Resource
     new custom.AwsCustomResource(this, "booksddbInitData", {
