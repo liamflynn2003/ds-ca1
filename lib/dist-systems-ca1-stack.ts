@@ -44,13 +44,6 @@ export class DistSystemsCa1Stack extends cdk.Stack {
     });
 
     this.auth = authApi.root.addResource("auth");
-    const appApi = new apig.RestApi(this, "AppApi", {
-      description: "App RestApi",
-      endpointTypes: [apig.EndpointType.REGIONAL],
-      defaultCorsPreflightOptions: {
-        allowOrigins: apig.Cors.ALL_ORIGINS,
-      },
-    });
 
     const appCommonFnProps = {
       architecture: lambda.Architecture.ARM_64,
@@ -202,10 +195,6 @@ export class DistSystemsCa1Stack extends cdk.Stack {
     booksEndpoint.addMethod(
       "GET",
       new apig.LambdaIntegration(getAllBooksFn, { proxy: true }),
-      {
-        authorizer: requestAuthorizer, 
-        authorizationType: apig.AuthorizationType.CUSTOM,
-      }
     );
 
     // Protected POST 
