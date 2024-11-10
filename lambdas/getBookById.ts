@@ -1,22 +1,19 @@
 import { Handler } from "aws-lambda";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import {
-  DynamoDBDocumentClient,
-  GetCommand,
-  QueryCommand,
-  QueryCommandInput,
-} from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, GetCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { TranslateClient, TranslateTextCommand } from "@aws-sdk/client-translate";
 
 const ddbDocClient = createDDbDocClient();
+const translateClient = new TranslateClient({ region: process.env.REGION });
 
 export const handler: Handler = async (event) => {
   try {
-    // Print Event
     console.log("[EVENT]", JSON.stringify(event));
 
     const parameters = event?.pathParameters;
     const queryParams = event.queryStringParameters;
     const id = parameters?.id;
+    const language = queryParams?.language;
 
     if (!id) {
       return {
@@ -48,24 +45,29 @@ export const handler: Handler = async (event) => {
 
     // If no query is made, return volumeInfo
     if (!queryParams?.authors && !queryParams?.title && !queryParams?.categories) {
+      const translatedVolumeInfo = language ? await translateText(volumeInfo, language) : volumeInfo;
       return {
         statusCode: 200,
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ data: volumeInfo || {} }),
+        body: JSON.stringify({ data: translatedVolumeInfo || {} }),
       };
     }
 
-    // Handle query for authors
-    if (queryParams?.authors === 'true') {
-      const authorsCommandOutput = await ddbDocClient.send(
+    // Handle query for authors, categories, and title
+    const handleQuery = async (key: string) => {
+      const queryCommandOutput = await ddbDocClient.send(
         new QueryCommand({
           TableName: process.env.TABLE_NAME,
           KeyConditionExpression: "id = :id",
           ExpressionAttributeValues: { ":id": id },
         })
       );
-      const authors = authorsCommandOutput.Items?.map(item => item?.volumeInfo?.authors).flat() || [];
+      const data = queryCommandOutput.Items?.map(item => item?.volumeInfo?.[key]).flat() || [];
+      return language ? await translateText({ [key]: data }, language) : data;
+    };
 
+    if (queryParams?.authors === 'true') {
+      const authors = await handleQuery("authors");
       return {
         statusCode: 200,
         headers: { "content-type": "application/json" },
@@ -73,35 +75,17 @@ export const handler: Handler = async (event) => {
       };
     }
 
-    // Handle query for categories
     if (queryParams?.categories === 'true') {
-      const categoriesCommandOutput = await ddbDocClient.send(
-        new QueryCommand({
-          TableName: process.env.TABLE_NAME,
-          KeyConditionExpression: "id = :id",
-          ExpressionAttributeValues: { ":id": id },
-        })
-      );
-      const categories = categoriesCommandOutput.Items?.map(item => item?.volumeInfo?.categories).flat() || [];
-
+      const categories = await handleQuery("categories");
       return {
         statusCode: 200,
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ data: categories }),
-      }
+      };
     }
 
-    // Handle query for title
     if (queryParams?.title === 'true') {
-      const titleCommandOutput = await ddbDocClient.send(
-        new QueryCommand({
-          TableName: process.env.TABLE_NAME,
-          KeyConditionExpression: "id = :id",
-          ExpressionAttributeValues: { ":id": id },
-        })
-      );
-      const title = titleCommandOutput.Items?.map(item => item?.volumeInfo?.title).flat() || [];
-
+      const title = await handleQuery("title");
       return {
         statusCode: 200,
         headers: { "content-type": "application/json" },
@@ -109,7 +93,6 @@ export const handler: Handler = async (event) => {
       };
     }
 
-    // Default return if no specific query is made
     return {
       statusCode: 200,
       headers: { "content-type": "application/json" },
@@ -125,7 +108,6 @@ export const handler: Handler = async (event) => {
   }
 };
 
-// Function to create a DynamoDB Document Client with marshall/unmarshall options
 function createDDbDocClient() {
   const ddbClient = new DynamoDBClient({ region: process.env.REGION });
   const marshallOptions = {
@@ -138,4 +120,22 @@ function createDDbDocClient() {
   };
   const translateConfig = { marshallOptions, unmarshallOptions };
   return DynamoDBDocumentClient.from(ddbClient, translateConfig);
+}
+
+
+async function translateText(text: any, targetLanguage: string) {
+  const translateCommand = new TranslateTextCommand({
+    Text: JSON.stringify(text),
+    SourceLanguageCode: 'en',
+    TargetLanguageCode: targetLanguage,
+  });
+
+  // Return translated text, if it fails, return the original text
+  try {
+    const result = await translateClient.send(translateCommand);
+    return JSON.parse(result.TranslatedText || '{}');
+  } catch (error) {
+    console.error("Translation Error: ", error);
+    return text;
+  }
 }
