@@ -1,4 +1,4 @@
-import { Book } from '../shared/types.d.ts'
+import { Book } from '../shared/types'
 
 export const books: Book[] = [
   {
