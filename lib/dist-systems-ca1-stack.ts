@@ -58,6 +58,9 @@ export class DistSystemsCa1Stack extends cdk.Stack {
       "ConfirmFn",
       "confirm-signup.ts"
     );
+
+    this.addAuthRoute('signout', 'GET', 'SignoutFn', 'signout.ts');
+    this.addAuthRoute('signin', 'POST', 'SigninFn', 'signin.ts');
     
     // Tables 
     const booksTable = new dynamodb.Table(this, "BooksTable", {
