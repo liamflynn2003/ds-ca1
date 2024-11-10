@@ -122,20 +122,37 @@ function createDDbDocClient() {
   return DynamoDBDocumentClient.from(ddbClient, translateConfig);
 }
 
+async function translateText(data, targetLanguage) {
+  // Helper function to check if data is a string and translate it
+  function translateIfString(value) {
+    if (typeof value === 'string') {
+      return translateClient.send(new TranslateTextCommand({
+        Text: value,
+        SourceLanguageCode: 'en',
+        TargetLanguageCode: targetLanguage,
+      }))
+        .then(result => result.TranslatedText)
+        .catch(err => {
+          console.error('Translation Error: ', err);
+          return value; 
+        });
+    }
+    return Promise.resolve(value); 
+  }
 
-async function translateText(text: any, targetLanguage: string) {
-  const translateCommand = new TranslateTextCommand({
-    Text: JSON.stringify(text),
-    SourceLanguageCode: 'en',
-    TargetLanguageCode: targetLanguage,
-  });
+  // If the input is an object, iterate through its properties
+  if (typeof data === 'object' && !Array.isArray(data) && data !== null) {
+    const translatedData = {};
 
-  // Return translated text, if it fails, return the original text
-  try {
-    const result = await translateClient.send(translateCommand);
-    return JSON.parse(result.TranslatedText || '{}');
-  } catch (error) {
-    console.error("Translation Error: ", error);
-    return text;
+    for (const [key, value] of Object.entries(data)) {
+      translatedData[key] = await translateIfString(value);
+    }
+    return translatedData;
+  } else if (Array.isArray(data)) {
+    return Promise.all(data.map(item => translateIfString(item)));
+  } else {
+    return translateIfString(data);
   }
 }
+
+
