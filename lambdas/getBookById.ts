@@ -123,7 +123,7 @@ function createDDbDocClient() {
 }
 
 async function translateText(data, targetLanguage) {
-  // Helper function to check if data is a string and translate it
+  // Check if data is a string, then translate
   function translateIfString(value) {
     if (typeof value === 'string') {
       return translateClient.send(new TranslateTextCommand({
@@ -140,7 +140,7 @@ async function translateText(data, targetLanguage) {
     return Promise.resolve(value); 
   }
 
-  // If the input is an object, iterate through its properties
+  // Iterate through properties, translate if its a string
   if (typeof data === 'object' && !Array.isArray(data) && data !== null) {
     const translatedData = {};
 
